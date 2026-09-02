@@ -118,6 +118,7 @@ Masks the words after the current one, so the model cannot see the answer it is 
     → survivors are scaled by $\frac{1}{1-p}$ so the totals stay comparable
     → training only, switched off at inference
     → applied to the attention weights after softmax, so after the causal mask
+    → prevents overfitting 
 
 ### Multi-head attention
 
