@@ -130,3 +130,5 @@ Several attention heads running in parallel, each free to learn a different kind
     → same maths, far fewer matmuls
 → `d_out` must divide evenly by `num_heads`
     → and the $d_k$ inside the $\sqrt{\,}$ is the per-head width, not the full width
+
+
