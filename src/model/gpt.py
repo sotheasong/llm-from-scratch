@@ -25,33 +25,26 @@ class DummyTransformerBlock(nn.Module):
 
 
 # 4.1 the GPT skeleton
-class DummyGPTModel(nn.Module):
+class GPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
         self.drop_emb = nn.Dropout(cfg["drop_rate"])
-        self.trf_blocks = nn.Sequential(
-            *[DummyTransformerBlock(cfg) for _ in range(cfg["n_layers"])]
-        )
-        self.final_norm = DummyLayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(
-            cfg["emb_dim"], cfg["vocab_size"], bias=False
-        )
 
+        self.trf_blocks = nn.Sequential(*[TransformerBlock(cfg) for _ in range(cfg["n_layers"])])
+        self.final_norm = LayerNorm(cfg["emb_dim"])
+        self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+    
     def forward(self, in_idx):
         batch_size, seq_len = in_idx.shape
         tok_embeds = self.tok_emb(in_idx)
-        pos_embeds = self.pos_emb(
-            torch.arange(seq_len, device=in_idx.device)
-        )
-        # positions are 0..seq_len-1, the same for every sequence in the batch
+        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
         x = tok_embeds + pos_embeds
         x = self.drop_emb(x)
         x = self.trf_blocks(x)
         x = self.final_norm(x)
         logits = self.out_head(x)
-        # logits are raw scores, one per vocab entry per position
         return logits
 
 
@@ -124,46 +117,39 @@ class TransformerBlock(nn.Module):
         x = self.drop_shortcut(x)
         x = x + shortcut
         return x
-        # shape in equals shape out, which is what lets these stack
-
 
 if __name__ == "__main__":
     import tiktoken
 
     from configs.gpt import GPT_CONFIG_124M
+    from src.model.gpt import GPTModel
 
     torch.manual_seed(123)
     torch.set_printoptions(sci_mode=False)
 
-    print("4.1 the skeleton runs end to end")
     tokenizer = tiktoken.get_encoding("gpt2")
     batch = torch.stack([
         torch.tensor(tokenizer.encode("Every effort moves you")),
         torch.tensor(tokenizer.encode("Every day holds a")),
     ], dim=0)
-    print("  token IDs:", batch.tolist())
-    logits = DummyGPTModel(GPT_CONFIG_124M)(batch)
-    print("  logits shape:", tuple(logits.shape), "= (batch, tokens, vocab_size)")
+ 
+    model = GPTModel(GPT_CONFIG_124M)
+    out = model(batch)
+    print("Input batch:\n", batch)
+    print("\nOutput shape:", out.shape)
+    print(out)
 
-    print("\n4.4 without shortcut connections")
-    layer_sizes = [3, 3, 3, 3, 3, 1]
-    sample_input = torch.tensor([[1., 0., -1.]])
-    torch.manual_seed(123)
-    print_gradients(ExampleDeepNeuralNetwork(layer_sizes, use_shortcut=False), sample_input)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"\nTotal parameters in the model: {total_params:,}")
+    
+    print("Token embedding layer shape:", model.tok_emb.weight.shape)
+    print("Output layer shape:", model.out_head.weight.shape)
 
-    print("\n4.4 with shortcut connections")
-    torch.manual_seed(123)
-    print_gradients(ExampleDeepNeuralNetwork(layer_sizes, use_shortcut=True), sample_input)
+    total_params_gpt2 = (
+        total_params - sum(p.numel() for p in model.out_head.parameters())
+    )
+    print(f"\nTotal parameters in the model (excluding output layer): {total_params_gpt2:,}")
 
-    print("\n4.5 the transformer block")
-    torch.manual_seed(123)
-    block = TransformerBlock(GPT_CONFIG_124M)
-    x = torch.rand(2, 4, GPT_CONFIG_124M["emb_dim"])
-    print("  in ", tuple(x.shape), "-> out", tuple(block(x).shape))
-
-    n = lambda m: sum(p.numel() for p in m.parameters())
-    print(f"  attention    {n(block.att):>10,}")
-    print(f"  feed forward {n(block.ff):>10,}  ({n(block.ff) / n(block.att):.0f}x the attention)")
-    print(f"  norms        {n(block.norm1) + n(block.norm2):>10,}")
-    print(f"  per block    {n(block):>10,}")
-    print(f"  x{GPT_CONFIG_124M['n_layers']} blocks  {GPT_CONFIG_124M['n_layers'] * n(block):>10,}")
+    total_size_bytes = total_params * 4       #1
+    total_size_mb = total_size_bytes / (1024 * 1024)     #2
+    print(f"Total size of the model: {total_size_mb:.2f} MB")
