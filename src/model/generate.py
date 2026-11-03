@@ -28,6 +28,14 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
         # the new token joins the sequence and becomes input on the next pass
     return idx
 
+def text_to_token_ids(text, tokenizer):
+    encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})
+    encoded_tensor = torch.tensor(encoded).unsqueeze(0)
+    return encoded_tensor
+
+def token_ids_to_text(token_ids, tokenizer):
+    flat = token_ids.squeeze(0)
+    return tokenizer.decode(flat.tolist())
 
 if __name__ == "__main__":
     import tiktoken
@@ -63,3 +71,13 @@ if __name__ == "__main__":
     print("Decoded text:", decoded_text)
     # gibberish, and correctly so, the weights are still random
     # -> training is chapter 5
+
+    start_context = "Every effort moves you"
+    tokenizer = tiktoken.get_encoding("gpt2")
+    token_ids = generate_text_simple(
+        model = model,
+        idx = text_to_token_ids(start_context, tokenizer),
+        max_new_tokens = 6,
+        context_size = GPT_CONFIG_124M["context_length"]
+    )
+    print("Decoded text:", token_ids_to_text(token_ids, tokenizer))
