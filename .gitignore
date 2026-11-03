@@ -3,3 +3,5 @@ __pycache__/
 /data/
 figures/
 Build a Large Language Model (From Scratch).epub
+.RData
+.Rhistory
