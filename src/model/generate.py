@@ -81,3 +81,9 @@ if __name__ == "__main__":
         context_size = GPT_CONFIG_124M["context_length"]
     )
     print("Decoded text:", token_ids_to_text(token_ids, tokenizer))
+
+    inputs = torch.tensor([[16833, 3626, 6100],   # ["every effort moves",
+                       [40,    1107, 588]])   #  "I really like"]
+
+    targets = torch.tensor([[3626, 6100, 345  ],  # [" effort moves you",
+                        [1107, 588, 11311]])  #  " really like chocolate"]
