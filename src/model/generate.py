@@ -28,6 +28,10 @@ def generate_text_simple(model, idx, max_new_tokens, context_size):
         # the new token joins the sequence and becomes input on the next pass
     return idx
 
+
+# 5.1.1 text <-> token ID helpers, the wrapper around the tokenizer calls
+# -> unsqueeze(0) adds the batch dimension the model expects, (n,) becomes (1, n)
+# -> squeeze(0) takes it back off before decoding
 def text_to_token_ids(text, tokenizer):
     encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})
     encoded_tensor = torch.tensor(encoded).unsqueeze(0)
@@ -36,6 +40,7 @@ def text_to_token_ids(text, tokenizer):
 def token_ids_to_text(token_ids, tokenizer):
     flat = token_ids.squeeze(0)
     return tokenizer.decode(flat.tolist())
+
 
 if __name__ == "__main__":
     import tiktoken
@@ -81,9 +86,3 @@ if __name__ == "__main__":
         context_size = GPT_CONFIG_124M["context_length"]
     )
     print("Decoded text:", token_ids_to_text(token_ids, tokenizer))
-
-    inputs = torch.tensor([[16833, 3626, 6100],   # ["every effort moves",
-                       [40,    1107, 588]])   #  "I really like"]
-
-    targets = torch.tensor([[3626, 6100, 345  ],  # [" effort moves you",
-                        [1107, 588, 11311]])  #  " really like chocolate"]
