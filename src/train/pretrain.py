@@ -59,6 +59,7 @@ if __name__ == "__main__":
     from configs.gpt import GPT_CONFIG_124M
     from src.model.gpt import GPTModel
     from src.data.dataset import create_dataloader_v1
+    from src.eval.plot import plot_losses
     from pathlib import Path
     
     torch.manual_seed(123)
@@ -116,3 +117,6 @@ if __name__ == "__main__":
         start_context="Every effort moves you",
         tokenizer=tokenizer
     )
+
+    epochs_tensor = torch.linspace(0, num_epochs, len(train_losses))
+    plot_losses(epochs_tensor, tokens_seen, train_losses, val_losses)
