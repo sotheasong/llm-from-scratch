@@ -41,12 +41,23 @@ def token_ids_to_text(token_ids, tokenizer):
     flat = token_ids.squeeze(0)
     return tokenizer.decode(flat.tolist())
 
+def print_sample_tokens(probas):
+    torch.manual_seed(123)
+    sample = [torch.multinomial(probas, num_samples=1).item() for i in range(1_000)]
+    sampled_ids = torch.bincount(torch.tensor(sample))
+    for i, freq in enumerate(sampled_ids):
+        print(f"{freq} x {inverse_vocab[i]}")
+
+def softmax_with_temperature(logits, temperature):
+    scaled_logits = logits / temperature
+    return torch.softmax(scaled_logits, dim=0)
 
 if __name__ == "__main__":
     import tiktoken
 
     from configs.gpt import GPT_CONFIG_124M
     from src.model.gpt import GPTModel
+    from matplotlib import pyplot as plt
 
     tokenizer = tiktoken.get_encoding("gpt2")
     torch.manual_seed(123)
@@ -109,3 +120,19 @@ if __name__ == "__main__":
     probas = torch.softmax(next_token_logits, dim=-1)
     next_token_id = torch.argmax(probas).item()
     print(inverse_vocab[next_token_id])
+
+    print_sample_tokens(probas)
+
+    temperatures = [1, 0.1, 5]
+    scaled_probas = [softmax_with_temperature(next_token_logits, t) for t in temperatures]
+    x = torch.arange(len(vocab))
+    bar_width = 0.15
+    fig, ax = plt.subplots(figsize = (5,3))
+    for i, T in enumerate(temperatures):
+        rects = ax.bar(x + i * bar_width, scaled_probas[i], bar_width, label = f"Temperature = {T}")
+    ax.set_ylabel("Probability")
+    ax.set_xticks(x)
+    ax.set_xticklabels(vocab.keys(), rotation = 90)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig("../../figures/temperature.png", dpi = 300)
