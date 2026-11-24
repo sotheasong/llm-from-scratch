@@ -41,19 +41,52 @@ def token_ids_to_text(token_ids, tokenizer):
     flat = token_ids.squeeze(0)
     return tokenizer.decode(flat.tolist())
 
-def print_sample_tokens(probas):
+# 5.3.1 what sampling actually does, 1000 draws from one probability vector
+def print_sample_tokens(probas, inverse_vocab):
     torch.manual_seed(123)
     sample = [torch.multinomial(probas, num_samples=1).item() for i in range(1_000)]
     sampled_ids = torch.bincount(torch.tensor(sample))
     for i, freq in enumerate(sampled_ids):
         print(f"{freq} x {inverse_vocab[i]}")
 
+# 5.3.1 temperature rescales the logits before the softmax
+# -> below 1 sharpens toward argmax, above 1 flattens toward uniform
 def softmax_with_temperature(logits, temperature):
     scaled_logits = logits / temperature
     return torch.softmax(scaled_logits, dim=0)
 
+# 5.3.3 generate_text_simple plus top-k, temperature and an early stop
+# -> temperature=0.0 falls back to argmax, which is generate_text_simple's behaviour
+def generate(model, idx, max_new_tokens, context_size, temperature=0.0, top_k=None, eos_id=None):
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:, -context_size:]
+        with torch.no_grad():
+            logits = model(idx_cond)
+        logits = logits[:, -1, :]
+        if top_k is not None:
+            top_logits, _ = torch.topk(logits, top_k)
+            min_val = top_logits[:, -1]
+            logits = torch.where(
+                logits < min_val,
+                torch.tensor(float("-inf")).to(logits.device),
+                logits
+            )
+        if temperature > 0.0:
+            logits = logits / temperature
+            probs = torch.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1) 
+        else:
+            idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+        
+        if idx_next == eos_id:
+            break
+        idx = torch.cat((idx, idx_next), dim=1)
+    return idx
+
 if __name__ == "__main__":
     import tiktoken
+
+    from pathlib import Path
 
     from configs.gpt import GPT_CONFIG_124M
     from src.model.gpt import GPTModel
@@ -88,6 +121,44 @@ if __name__ == "__main__":
     # print("Decoded text:", decoded_text)
     # gibberish, and correctly so, the weights are still random
     # -> training is chapter 5
+
+    # 5.3 onwards needs the model trained in 5.2, not the random one above
+    # -> the book is one notebook session, so its `model` is already trained here
+    # -> this repeats the 5.2 run to get the same weights, about 70s on cpu
+    # -> 5.4 replaces this with saving the weights once and loading them back
+    from src.data.dataset import create_dataloader_v1
+    from src.train.pretrain import train_model_simple
+
+    text_data = (Path(__file__).resolve().parents[2]
+                 / "data" / "raw" / "the-verdict.txt").read_text(encoding="utf-8")
+    split_idx = int(0.90 * len(text_data))
+    train_loader = create_dataloader_v1(
+        text_data[:split_idx], batch_size=2,
+        max_length=GPT_CONFIG_124M["context_length"],
+        stride=GPT_CONFIG_124M["context_length"],
+        drop_last=True, shuffle=True, num_workers=0
+    )
+    val_loader = create_dataloader_v1(
+        text_data[split_idx:], batch_size=2,
+        max_length=GPT_CONFIG_124M["context_length"],
+        stride=GPT_CONFIG_124M["context_length"],
+        drop_last=False, shuffle=False, num_workers=0
+    )
+
+    torch.manual_seed(123)
+    model = GPTModel(GPT_CONFIG_124M)
+    # a fresh model, so the seed lines up with 5.2 and the weights come out identical
+    # -> cpu, because MPS float arithmetic drifts the weights off the book's
+    device = torch.device("cpu")
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
+    print("training 10 epochs to reach the 5.2 weights...")
+    train_model_simple(
+        model, train_loader, val_loader, optimizer, device,
+        num_epochs=10, eval_freq=5, eval_iter=5,
+        start_context="Every effort moves you", tokenizer=tokenizer
+    )
+    model.eval()
 
     start_context = "Every effort moves you"
     tokenizer = tiktoken.get_encoding("gpt2")
@@ -135,19 +206,31 @@ if __name__ == "__main__":
     ax.set_xticklabels(vocab.keys(), rotation = 90)
     ax.legend()
     plt.tight_layout()
-    # plt.savefig("../../figures/temperature.png", dpi = 300)
+    # plt.savefig(Path(__file__).resolve().parents[2] / "figures" / "temperature.png", dpi=300)
 
     top_k = 3
     top_logits, top_pos = torch.topk(next_token_logits, top_k)
-    print("Top logits:", top_logits)
-    print("Top positions:", top_pos)
+    # print("Top logits:", top_logits)
+    # print("Top positions:", top_pos)
     
     new_logits = torch.where(
         condition = next_token_logits < top_logits[-1],
         input = torch.tensor(float("-inf")),
         other = next_token_logits
     )
-    print("New logits:", new_logits)
+    # print("New logits:", new_logits)
     
     topk_probas = torch.softmax(new_logits, dim=0)
-    print("Top-k probabilities:", topk_probas)
+    # print("Top-k probabilities:", topk_probas)
+    
+    torch.manual_seed(123)
+    # reseed here, the model init and the plotting above both drew from the RNG
+    token_ids = generate(
+        model = model,
+        idx = text_to_token_ids("Every effort moves you", tokenizer),
+        max_new_tokens=15,
+        context_size=GPT_CONFIG_124M["context_length"],
+        top_k=25,
+        temperature=1.4
+    )
+    print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
