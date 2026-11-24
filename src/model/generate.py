@@ -64,9 +64,9 @@ if __name__ == "__main__":
 
     start_context = "Hello, I am"
     encoded = tokenizer.encode(start_context)
-    print("encoded:", encoded)
+    # print("encoded:", encoded)
     encoded_tensor = torch.tensor(encoded).unsqueeze(0)
-    print("encoded_tensor.shape:", encoded_tensor.shape)
+    # print("encoded_tensor.shape:", encoded_tensor.shape)
     # unsqueeze(0) adds the batch dimension, (4,) becomes (1, 4)
 
     model = GPTModel(GPT_CONFIG_124M)
@@ -80,12 +80,12 @@ if __name__ == "__main__":
         max_new_tokens=6,
         context_size=GPT_CONFIG_124M["context_length"]
     )
-    print("Output:", out)
-    print("Output length:", len(out[0]))
+    # print("Output:", out)
+    # print("Output length:", len(out[0]))
     # 10, the 4 prompt tokens plus the 6 that were generated
 
     decoded_text = tokenizer.decode(out.squeeze(0).tolist())
-    print("Decoded text:", decoded_text)
+    # print("Decoded text:", decoded_text)
     # gibberish, and correctly so, the weights are still random
     # -> training is chapter 5
 
@@ -97,7 +97,7 @@ if __name__ == "__main__":
         max_new_tokens = 25,
         context_size = GPT_CONFIG_124M["context_length"]
     )
-    print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
+    # print("Output text:\n", token_ids_to_text(token_ids, tokenizer))
 
     vocab = {
         "closer": 0,
@@ -119,9 +119,9 @@ if __name__ == "__main__":
     
     probas = torch.softmax(next_token_logits, dim=-1)
     next_token_id = torch.argmax(probas).item()
-    print(inverse_vocab[next_token_id])
+    # print(inverse_vocab[next_token_id])
 
-    print_sample_tokens(probas)
+    # print_sample_tokens(probas)
 
     temperatures = [1, 0.1, 5]
     scaled_probas = [softmax_with_temperature(next_token_logits, t) for t in temperatures]
@@ -135,4 +135,19 @@ if __name__ == "__main__":
     ax.set_xticklabels(vocab.keys(), rotation = 90)
     ax.legend()
     plt.tight_layout()
-    plt.savefig("../../figures/temperature.png", dpi = 300)
+    # plt.savefig("../../figures/temperature.png", dpi = 300)
+
+    top_k = 3
+    top_logits, top_pos = torch.topk(next_token_logits, top_k)
+    print("Top logits:", top_logits)
+    print("Top positions:", top_pos)
+    
+    new_logits = torch.where(
+        condition = next_token_logits < top_logits[-1],
+        input = torch.tensor(float("-inf")),
+        other = next_token_logits
+    )
+    print("New logits:", new_logits)
+    
+    topk_probas = torch.softmax(new_logits, dim=0)
+    print("Top-k probabilities:", topk_probas)
