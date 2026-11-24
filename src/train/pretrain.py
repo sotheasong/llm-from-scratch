@@ -93,9 +93,14 @@ if __name__ == "__main__":
     )
 
     model = GPTModel(GPT_CONFIG_124M)
+    USE_GPU = False
+    # the book's numbers come off a CPU, and MPS float arithmetic drifts from them
+    # -> step 0 reads 9.818 on MPS against 9.781 on CPU, and the gap compounds:
+    #    by step 85 the train loss is 0.712 instead of 0.391
+    # -> flip to True for a roughly 2x faster run once you stop comparing to the book
     device = torch.device(
-        "mps" if torch.backends.mps.is_available()
-        else "cuda" if torch.cuda.is_available()
+        "mps" if USE_GPU and torch.backends.mps.is_available()
+        else "cuda" if USE_GPU and torch.cuda.is_available()
         else "cpu"
     )
     print("device:", device)
