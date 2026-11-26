@@ -8,6 +8,10 @@ dependencies = [
     "torch",
     "tiktoken",
     "numpy",
+    # 5.5 only: the OpenAI weights ship as a TensorFlow checkpoint
+    "tensorflow",
+    "tqdm",
+    "requests",
 ]
 
 [build-system]
